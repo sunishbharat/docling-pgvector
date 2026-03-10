@@ -1,0 +1,10 @@
+langchain
+langchain_core
+langchain_community
+langchain_docling
+typing
+pydantic
+tqdm
+pymupdf
+ipywidgets
+ipykernel
