@@ -8,3 +8,5 @@ tqdm
 pymupdf
 ipywidgets
 ipykernel
+sentence_transformers
+tenacity

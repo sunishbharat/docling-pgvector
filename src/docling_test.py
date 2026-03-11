@@ -7,6 +7,7 @@ import pymupdf
 
 srcFile = "./data/Math1.pdf"
 srcFile = "./data/VL_JEPA.pdf"
+srcFile = "./data/3a.pdf"
 page_chunks = 50
 
 
@@ -63,9 +64,11 @@ from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from transformers import AutoTokenizer
+from sentence_transformers import SentenceTransformer
 
 EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 
+model = SentenceTransformer(EMBED_MODEL_ID)
 tokenizer: BaseTokenizer = HuggingFaceTokenizer(
     tokenizer=AutoTokenizer.from_pretrained(EMBED_MODEL_ID),
 )
@@ -78,6 +81,8 @@ for docobj in doc_obj_list:
     chunk_iter = chunker.chunk(dl_doc=docobj)
     chunk_list.append(list(chunk_iter))
 
+embeddings_list = []
+enriched_text_list= []
 
 for chunkitem in chunk_list:
     for i, chunk in enumerate(chunkitem):
@@ -86,6 +91,16 @@ for chunkitem in chunk_list:
 
         enriched_text = chunker.contextualize(chunk=chunk)
         print(f"\nchunker.contextualize(chunk):\n{f'{enriched_text[:300]}…'!r}")
+        
+        enriched_text_list.append(enriched_text)
+        embeddings = model.encode(enriched_text)
+        embeddings_list.append(embeddings.tolist())
 
         print()
     
+i = 0
+for chunk, embed in zip(enriched_text_list, embeddings_list):
+    print(f"------{i}-----")
+    print(f"{chunk}")
+    print(f"{len(embed)=}")
+    i +=1

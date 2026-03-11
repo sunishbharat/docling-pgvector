@@ -22,28 +22,39 @@
  - docker run --name pgadmin-container -p 5050:80 -e PGADMIN_DEFAULT_EMAIL=user@domain.com -e PGADMIN_DEFAULT_PASSWORD=password -d dpage/pgadmin4
 """
 
+import os
+import sys
 import psycopg2
 import numpy as np
-import os
 from dotenv import load_dotenv
-
+from tenacity import retry, stop_after_attempt, wait_exponential_jitter, retry_if_exception_type
+from psycopg2 import OperationalError
 
 load_dotenv()
 
-PSQL_USERNAME  =os.environ["PSQL_USERNAME"] 
-PSQL_PASSWORD  =os.environ["PSQL_PASSWORD"] 
-PSQL_HOST      =os.environ["PSQL_HOST"]
-PSQL_PORT      =os.environ["PSQL_PORT"]
-PSQL_DATABASE  =os.environ["PSQL_DATABASE"] 
-PSQL_SSLMODE   =os.environ["PSQL_SSLMODE"] 
 
-conn = psycopg2.connect(
-    database="pgvectordb",
-    user="postgres",
-    password="postgres",
-    host="127.0.0.1",
-    port=5432,
+@retry(
+    stop=stop_after_attempt(1),  # ~5 min max
+    wait=wait_exponential_jitter(initial=1, max=2),  # 1-10s with jitter
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=print(f"Trying to connect..")
 )
+
+
+def pgvector_connect():
+    return psycopg2.connect(
+        database="pgvectordb",
+        user="postgres",
+        password="postgres",
+        host="127.0.0.1",
+        port=5432,
+    )
+
+try:
+    conn = pgvector_connect()
+except Exception as e:
+    print(f"Connection Exception : {e}")
+    sys.exit(1)
 
 try:
     cur = conn.cursor()
@@ -58,6 +69,7 @@ try:
     records = cur.fetchall()
     for r in records:
         print(r)
+
 
 finally:
     print("Closing db connection")
