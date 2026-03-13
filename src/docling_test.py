@@ -1,17 +1,40 @@
 
-from pathlib import Path
-from docling.document_converter import DocumentConverter
-from docling.exceptions import ConversionError
+import sys
 import pymupdf
+from os import PathLike
+from pathlib import Path
+from docling.exceptions import ConversionError
+from docling_core.types.doc import DoclingDocument
+from docling.document_converter import DocumentConverter
+from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
+from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
+from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
+from transformers import AutoTokenizer
+from sentence_transformers import SentenceTransformer
+from pgvector_client import PGVectorClient
+from collections.abc import Iterable
+from docling_core.types.doc import (
+    DoclingDocument,
+    TextItem,
+    TableItem,
+    PictureItem,
+    SectionHeaderItem,
+)
 
+#EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
+EMBED_MODEL_ID = "BAAI/bge-base-en-v1.5"
 
-srcFile = "./data/Math1.pdf"
-srcFile = "./data/VL_JEPA.pdf"
 srcFile = "./data/3a.pdf"
+srcFile = "./data/VL_JEPA.pdf"
+srcFile = "./data/Math1.pdf"
 page_chunks = 50
 
 
 
+######################################
+# get_total_pages
+#
+######################################
 def get_total_pages(srcFile:str) -> int:
     """ 
     Count total number of pages in a pdf document 
@@ -37,70 +60,159 @@ def get_total_pages(srcFile:str) -> int:
         return 0
 
 
-
-#########################
-try:
-    converter = DocumentConverter()
+######################################
+# _convert_document_gen
+#
+# Using iterables - generator , memory efficient
+######################################
+def _convert_document_gen(converter:DocumentConverter, 
+                          file:str|PathLike,
+                          total_pages:int,
+                          page_chunks:int) -> Iterable[DoclingDocument]:
+    """ Convert document stream by page """
     
-    total_pages= get_total_pages(srcFile=srcFile)
-    total_pages=100
+    file = Path(file)
+    if not file.is_file():
+        raise FileNotFoundError(f"Invalid file {file}") 
+    
+    for start in range(1,total_pages,page_chunks):
+        end = min(start + page_chunks, total_pages)
+
+        result = converter.convert(source=file,page_range=(start,end))
+        yield result.document
+        print(f"Pages : {start}:{end}")
+            
+        
+
+
+######################################
+# model_init
+#
+######################################
+def model_init(model_name:str) -> tuple[SentenceTransformer, HybridChunker]:
+
+    model = SentenceTransformer(EMBED_MODEL_ID)
+    tokenizer: BaseTokenizer = HuggingFaceTokenizer(
+        tokenizer=AutoTokenizer.from_pretrained(EMBED_MODEL_ID),
+    )
+        
+    chunker = HybridChunker(tokenizer=tokenizer)
+    print(f"{tokenizer.get_max_tokens()=}")
+    
+    return model, chunker
+    
+    
+    
+
+######################################
+# generate_embeddings
+#
+######################################
+def generate_embeddings(model:SentenceTransformer, 
+                        chunker:HybridChunker,
+                        doc_obj_list:list[DoclingDocument]) : 
+
+    content_set=set()
+    content_extract_list = []
+    for docobj in doc_obj_list:
+        """ Extract text """ 
+        for chunk in chunker.chunk(dl_doc=docobj):
+            enriched_text = chunker.contextualize(chunk=chunk)
+            text = (enriched_text or "").strip()
+            if(text):
+                content_set.add(text)
+                content_extract_list.append(text)
+
+        """ Extract tables""" 
+        for item, level in docobj.iterate_items():
+            if isinstance(item, TableItem):
+                markdown = (item.export_to_markdown(doc=docobj) or "").strip()
+                if markdown not in content_set:
+                    content_set.add(markdown)
+                    content_extract_list.append(markdown)
+                
+    # Encode into vector embeddings.
+    embeddings_list2 = model.encode(content_extract_list, batch_size=32)
+    return embeddings_list2, content_extract_list
+
+
+
+
+######################################
+# pgVector_db_update
+#
+######################################
+def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, embeddings_list2):
+
+    embd_dim = model.get_sentence_embedding_dimension()
+    with PGVectorClient() as pgclient:
+        with pgclient.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            #cur.execute("DROP TABLE IF EXISTS ITEMS")
+            cur.execute(f"""CREATE TABLE items (id bigserial PRIMARY KEY, text TEXT, embedding vector({embd_dim}));""")
+
+    with PGVectorClient() as pgclient:
+        for chunk, embed in zip(content_extract_list, embeddings_list2):
+            with pgclient.cursor() as cur:
+                cur.execute("INSERT INTO items (text, embedding) VALUES (%s, %s);", (chunk, embed))
+
+    print("Embeddings Updated ...")
+
+######################################
+# start_main 
+#
+######################################
+def start_main():
+    
+    print("Main Started ..")
+    converter = DocumentConverter()
+    print("Converter got..")
+    
+    total_pages= get_total_pages(srcFile=srcFile)+1
+    #total_pages=20
     print(f"{total_pages=}")
     
     doc_obj_list = []
-    for start in range(1,total_pages,page_chunks):
-        end = min(start + page_chunks, total_pages)
-        result = converter.convert(source=srcFile,page_range=(start,end))
-        doc_obj_list.append(result.document)
-        print(f"Pages : {start}:{end}")
-except ConversionError as e:
-    print(f"Exception in DocumentionConverter : {e}")
-     
-print(f"Total chunks = {len(doc_obj_list)}")
-
-
-####################
-
-from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
-from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
-from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
-from transformers import AutoTokenizer
-from sentence_transformers import SentenceTransformer
-
-EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-
-model = SentenceTransformer(EMBED_MODEL_ID)
-tokenizer: BaseTokenizer = HuggingFaceTokenizer(
-    tokenizer=AutoTokenizer.from_pretrained(EMBED_MODEL_ID),
-)
-chunker = HybridChunker(tokenizer=tokenizer)
-
-print(f"{tokenizer.get_max_tokens()=}")
-
-chunk_list = []
-for docobj in doc_obj_list:
-    chunk_iter = chunker.chunk(dl_doc=docobj)
-    chunk_list.append(list(chunk_iter))
-
-embeddings_list = []
-enriched_text_list= []
-
-for chunkitem in chunk_list:
-    for i, chunk in enumerate(chunkitem):
-        print(f"=== {i} ===")
-        print(f"chunk.text:\n{f'{chunk.text[:1000]}…'!r}")
-
-        enriched_text = chunker.contextualize(chunk=chunk)
-        print(f"\nchunker.contextualize(chunk):\n{f'{enriched_text[:300]}…'!r}")
-        
-        enriched_text_list.append(enriched_text)
-        embeddings = model.encode(enriched_text)
-        embeddings_list.append(embeddings.tolist())
-
-        print()
+    for docobj in _convert_document_gen(converter, file=srcFile,total_pages=total_pages,page_chunks=page_chunks):
+        doc_obj_list.append(docobj)
     
-i = 0
-for chunk, embed in zip(enriched_text_list, embeddings_list):
-    print(f"------{i}-----")
-    print(f"{chunk}")
-    print(f"{len(embed)=}")
-    i +=1
+    print(f"Total chunks = {len(doc_obj_list)}")
+    
+    model, chunker = model_init(EMBED_MODEL_ID)
+    
+    embeddings, content_extract_list = generate_embeddings(model, chunker, doc_obj_list)
+    pgVector_db_update(model, content_extract_list=content_extract_list, embeddings_list2=embeddings)
+    
+    return model
+    
+
+
+##########################################
+# Test the embeddings with a user query
+##########################################
+def test_embeddings(query:str, model:SentenceTransformer):
+    query_emb = model.encode(query, normalize_embeddings=True)
+    
+    sql = """
+        SELECT id, text, embedding <-> %s AS distance
+        FROM items
+        ORDER BY embedding <-> %s
+        LIMIT 5;
+        """
+
+    with PGVectorClient() as pgclient:
+        with pgclient.cursor() as cur:
+            cur.execute(sql, (query_emb, query_emb))
+            rows = cur.fetchall()
+
+    for id_, text, dist in rows:
+        print("*"*20)
+        print(id_, dist, "->", text)
+        
+
+
+        
+if __name__=="__main__":
+    model = start_main()
+    query = "Video classification and text-to-video retrieval for SigLIP2"
+    test_embeddings(query, model)

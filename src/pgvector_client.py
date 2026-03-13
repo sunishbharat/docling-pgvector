@@ -35,6 +35,7 @@ from psycopg2.extensions import connection, cursor
 from dataclasses import dataclass, field
 from collections.abc import Generator
 from contextlib import contextmanager
+from pgvector.psycopg2 import register_vector
 
 load_dotenv()
 
@@ -81,7 +82,6 @@ class PGVectorClient:
         wait=wait_exponential_jitter(initial=1.0, max=10.0),
         retry=retry_if_exception_type(OperationalError),
     )
-    
     def connect(self) -> None:
         """ Establish connection with pgvector database with retry mechanism"""
         
@@ -95,7 +95,7 @@ class PGVectorClient:
             host    =self.config.host,
             port    =self.config.port
         ) 
-        
+        register_vector(self._conn)
         logger.info(f"{self.config.database}:Connection established")
         
     def disconnect(self)->None:
