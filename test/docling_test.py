@@ -231,7 +231,11 @@ def test_embeddings(query:str, model:SentenceTransformer) -> list[tuple]:
         
     return rows
 
-
+def docling_test(path:str|PathLike) -> tuple[str]:
+    model = start_main()
+    query = "Video classification and text-to-video retrieval for SigLIP2"
+    records = test_embeddings(query, model)
+    return records
         
 if __name__=="__main__":
     model = start_main()

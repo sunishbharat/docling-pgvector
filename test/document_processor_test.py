@@ -41,7 +41,7 @@ def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, emb
     
     
     
-def document_proc_test(path:str|PathLike):
+def document_proc_test(path:str|PathLike) -> tuple[str]:
 
     logger.info(f"{path=} : {page_chunks=}")
     embedconfig:EmbeddingsConfig = EmbeddingsConfig( model_name= model_1)
