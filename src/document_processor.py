@@ -5,14 +5,18 @@ import pymupdf
 import numpy as np
 from os import PathLike
 from pathlib import Path
+from itertools import chain
 from contextlib import closing
 from typing import Iterable, Sequence
 from dataclasses import dataclass, field
 from dconfig import Chunkerconfig, EmbeddingsConfig
-from docling.document_converter import DocumentConverter
+from docling.datamodel.base_models import InputFormat
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
+from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions
 from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import HfApi
@@ -50,7 +54,17 @@ class InvalidModelError(ValueError):
 class DocumentProcessor:
     """ Process the documents using docling to get enriched text"""
     def __init__(self, embedconfig:EmbeddingsConfig |None=None):
-        self._converter = DocumentConverter()
+        
+        # Configure pipeline to choose GPU if available  
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.accelerator_options = AcceleratorOptions(device=AcceleratorDevice.AUTO)
+
+        self._converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+        
         self._embedconfig:EmbeddingsConfig = embedconfig or EmbeddingsConfig()
         self._model = SentenceTransformer(self._embedconfig.model_name)
         self._model_name = self._embedconfig.model_name
@@ -74,7 +88,7 @@ class DocumentProcessor:
         
     def embeddings_generate(self, path:str|PathLike, page_chunks:int|None=None) -> list[str]:
         logger.info(f"{path=} : {page_chunks=}")
-        return self._extract_chunk_data( path=path, page_chunks=page_chunks)
+        return self._extract_chunk_data( path=path, page_chunks=page_chunks), self._model
         
 
     def check_model_exists(self)->Exception:
@@ -113,9 +127,12 @@ class DocumentProcessor:
         
         embed_text_list=[]
         for docobj in self._convert_document_gen(file,total_pages=_numpages+1,page_chunks=page_chunks):
-            embed_text_list.append(self.extract_text_gen(docobj=docobj))
-            embed_text_list.append(self.extract_table_gen(docobj=docobj))
-        
+            embed_text_list.extend(chain.from_iterable(
+                [self.extract_text_gen(docobj=docobj),
+                 self.extract_table_gen(docobj=docobj)]
+            ))
+
+    
         return embed_text_list 
                 
                 
@@ -148,7 +165,6 @@ class DocumentProcessor:
     def extract_text_gen(self, docobj:DoclingDocument) -> Iterable[str]:
         
         """ Extract enriched text from document """
-        content_extract_list = []
         for chunk in self._chunker.chunk(dl_doc=docobj):
             enriched_text = self._chunker.contextualize(chunk=chunk)
             text = (enriched_text or "").strip()

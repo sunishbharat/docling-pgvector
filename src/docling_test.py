@@ -1,14 +1,19 @@
 
 import sys
+import logging
+import torch
 import pymupdf
 from os import PathLike
 from pathlib import Path
 from docling.exceptions import ConversionError
 from docling_core.types.doc import DoclingDocument
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
+from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.base_models import InputFormat
 from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
 from pgvector_client import PGVectorClient
@@ -21,12 +26,15 @@ from docling_core.types.doc import (
     SectionHeaderItem,
 )
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 #EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 EMBED_MODEL_ID = "BAAI/bge-base-en-v1.5"
 
-srcFile = "./data/3a.pdf"
 srcFile = "./data/VL_JEPA.pdf"
 srcFile = "./data/Math1.pdf"
+srcFile = "./data/3a.pdf"
 page_chunks = 50
 
 
@@ -56,7 +64,7 @@ def get_total_pages(srcFile:str) -> int:
         doc.close()
         return doclen
     except Exception as e:
-        print(f"Exception: {e}")
+        logging.exception(f"Exception: {e}")
         return 0
 
 
@@ -80,7 +88,7 @@ def _convert_document_gen(converter:DocumentConverter,
 
         result = converter.convert(source=file,page_range=(start,end))
         yield result.document
-        print(f"Pages : {start}:{end}")
+        logging.info(f"Pages : {start}:{end}")
             
         
 
@@ -97,7 +105,7 @@ def model_init(model_name:str) -> tuple[SentenceTransformer, HybridChunker]:
     )
         
     chunker = HybridChunker(tokenizer=tokenizer)
-    print(f"{tokenizer.get_max_tokens()=}")
+    logging.info(f"{tokenizer.get_max_tokens()=}")
     
     return model, chunker
     
@@ -148,15 +156,15 @@ def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, emb
     with PGVectorClient() as pgclient:
         with pgclient.cursor() as cur:
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            #cur.execute("DROP TABLE IF EXISTS ITEMS")
-            cur.execute(f"""CREATE TABLE items (id bigserial PRIMARY KEY, text TEXT, embedding vector({embd_dim}));""")
+            cur.execute("DROP TABLE IF EXISTS ITEMS")
+            cur.execute(f"""CREATE TABLE IF NOT EXISTS items (id bigserial PRIMARY KEY, text TEXT, embedding vector({embd_dim}));""")
 
     with PGVectorClient() as pgclient:
         for chunk, embed in zip(content_extract_list, embeddings_list2):
             with pgclient.cursor() as cur:
                 cur.execute("INSERT INTO items (text, embedding) VALUES (%s, %s);", (chunk, embed))
 
-    print("Embeddings Updated ...")
+    logging.info("Embeddings Updated ...")
 
 ######################################
 # start_main 
@@ -164,19 +172,29 @@ def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, emb
 ######################################
 def start_main():
     
-    print("Main Started ..")
-    converter = DocumentConverter()
-    print("Converter got..")
-    
+    # Auto-detect GPU/CPU
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logging.info(f"Using {device} accelerator")
+
+    # Configure pipeline  
+    pipeline_options = PdfPipelineOptions()
+    pipeline_options.accelerator_options = AcceleratorOptions(device=AcceleratorDevice.AUTO)
+
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+        }
+    )
+
     total_pages= get_total_pages(srcFile=srcFile)+1
     #total_pages=20
-    print(f"{total_pages=}")
+    logging.info(f"{total_pages=}")
     
     doc_obj_list = []
     for docobj in _convert_document_gen(converter, file=srcFile,total_pages=total_pages,page_chunks=page_chunks):
         doc_obj_list.append(docobj)
     
-    print(f"Total chunks = {len(doc_obj_list)}")
+    logging.info(f"Total chunks = {len(doc_obj_list)}")
     
     model, chunker = model_init(EMBED_MODEL_ID)
     
@@ -200,14 +218,16 @@ def test_embeddings(query:str, model:SentenceTransformer):
         LIMIT 5;
         """
 
+    logging.info(f"SQL Query = {sql} ")
+
     with PGVectorClient() as pgclient:
         with pgclient.cursor() as cur:
             cur.execute(sql, (query_emb, query_emb))
             rows = cur.fetchall()
 
     for id_, text, dist in rows:
-        print("*"*20)
-        print(id_, dist, "->", text)
+        logging.info("*"*40)
+        logging.info(f"{id_=}, {dist=}, ->\n {text}")
         
 
 
@@ -216,3 +236,5 @@ if __name__=="__main__":
     model = start_main()
     query = "Video classification and text-to-video retrieval for SigLIP2"
     test_embeddings(query, model)
+
+
