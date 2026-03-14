@@ -170,7 +170,7 @@ def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, emb
 # start_main 
 #
 ######################################
-def start_main():
+def start_main(path:str|PathLike)->SentenceTransformer:
     
     # Auto-detect GPU/CPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -186,7 +186,7 @@ def start_main():
         }
     )
 
-    total_pages= get_total_pages(srcFile=srcFile)+1
+    total_pages= get_total_pages(srcFile=path)+1
     #total_pages=20
     logging.info(f"{total_pages=}")
     
@@ -232,7 +232,7 @@ def test_embeddings(query:str, model:SentenceTransformer) -> list[tuple]:
     return rows
 
 def docling_test(path:str|PathLike) -> tuple[str]:
-    model = start_main()
+    model = start_main(path=path)
     query = "Video classification and text-to-video retrieval for SigLIP2"
     records = test_embeddings(query, model)
     return records
