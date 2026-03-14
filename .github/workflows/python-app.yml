@@ -24,27 +24,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check images
-        run: docker images
-
-      - name: Volume check
-        run: docker volume ls
-
-      - name: Volume create
-        run: docker volume create pgvector-data 
-     
-      - name: run docker image
-        run: docker run --name pgvector-container -e POSTGRES_PASSWORD=postgres -p 5432:5432 -v pgvector-data:/var/lib/postgresql/data -d pgvector/pgvector:pg17
-
-      - name: check healthy state
+      
+      - name: check running containers state
         run: docker ps
         
-
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - name: Check available images
+        run: docker images
+        
       - name: Install uv
         uses: astral-sh/setup-uv@v7        # ← official uv action
         with:
