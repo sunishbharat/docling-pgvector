@@ -46,7 +46,9 @@ jobs:
         
       - name: Download test PDF
         run: |
+          mkdir -p ./data
           curl -L https://arxiv.org/pdf/2408.09869 -o ./data/test.pdf
+          ls -la ./data/
       
       - name: Check if import works
         run: uv run python -c "from pgvector_client import PGVectorClient; print('Import OK')"
