@@ -31,14 +31,28 @@ jobs:
       - name: Check available images
         run: docker images
         
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v7        # ← official uv action
+        uses: astral-sh/setup-uv@v7        # official uv action
         with:
-          enable-cache: true               # ← caches deps between runs 🚀
+          enable-cache: true               # caches deps between runs
           python-version: "3.12"
 
       - name: Install all dependencies
-        run: uv sync                        # ← reads pyproject.toml + uv.lock
+        run: uv sync                        # reads pyproject.toml + uv.lock
+        
+      - name: Install all project in editable mode
+        run: uv pip install -e .
+        
+      - name: Download test PDF
+        run: |
+          curl -L https://arxiv.org/pdf/2408.09869 -o ./data/test.pdf
+      
+      - name: Check if import works
+        run: uv run python -c "from pgvector_client import PGVectorClient; print('Import OK')"
 
-      - name: Run app
-        run: uv run python ./src/pgvector_client.py
+      - name: Run pytest 
+        run: uv run pytest test/pgpytest.py -v -s
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vectordb
+        

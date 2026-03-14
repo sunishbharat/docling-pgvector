@@ -1,9 +1,10 @@
+import logging
 from document_processor import DocumentProcessor
 from dconfig import EmbeddingsConfig
 from pgvector_client import PGVectorClient
 from sentence_transformers import SentenceTransformer
-from docling_test import test_embeddings
-import logging
+from test.docling_test import test_embeddings
+from os import PathLike
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,18 +41,26 @@ def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, emb
     
     
     
-embedconfig:EmbeddingsConfig = EmbeddingsConfig( model_name= model_1)
+def document_proc_test(path:str|PathLike):
 
-doc = DocumentProcessor(embedconfig=embedconfig)
-content_list, model = doc.embeddings_generate(path=srcFile, page_chunks=50)
+    logger.info(f"{path=} : {page_chunks=}")
+    embedconfig:EmbeddingsConfig = EmbeddingsConfig( model_name= model_1)
 
-# Encode text documents into fixed-size vector embeddings using SentenceTransformer.
-embed_list = model.encode(content_list)
+    doc = DocumentProcessor(embedconfig=embedconfig)
+    content_list, model = doc.embeddings_generate(path=path, page_chunks=50)
 
-# Commit it into postgres vector db
-pgVector_db_update(model=model, content_extract_list=content_list, embeddings_list=embed_list)
+    # Encode text documents into fixed-size vector embeddings using SentenceTransformer.
+    embed_list = model.encode(content_list)
+
+    # Commit it into postgres vector db
+    pgVector_db_update(model=model, content_extract_list=content_list, embeddings_list=embed_list)
 
 
-# Test vector embeddings inference for similarity search.
-query = "Overview of Supervised Learning"
-test_embeddings(query=query, model=model)
+    # Test vector embeddings inference for similarity search.
+    query = "Overview of Supervised Learning"
+    records = test_embeddings(query=query, model=model)
+    return records
+
+if __name__=="__main__":
+    document_proc_test(path=srcFile)
+    logging.info("document_proc_test completed")

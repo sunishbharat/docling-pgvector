@@ -208,7 +208,7 @@ def start_main():
 ##########################################
 # Test the embeddings with a user query
 ##########################################
-def test_embeddings(query:str, model:SentenceTransformer):
+def test_embeddings(query:str, model:SentenceTransformer) -> list[tuple]:
     query_emb = model.encode(query, normalize_embeddings=True)
     
     sql = """
@@ -229,12 +229,18 @@ def test_embeddings(query:str, model:SentenceTransformer):
         logging.info("*"*40)
         logging.info(f"{id_=}, {dist=}, ->\n {text}")
         
+    return rows
 
 
         
 if __name__=="__main__":
     model = start_main()
     query = "Video classification and text-to-video retrieval for SigLIP2"
-    test_embeddings(query, model)
+    records = test_embeddings(query, model)
+    assert len(records)>0
+
+    assert isinstance(records[0][1],str)
+    assert records[0][1] != ""
+
 
 
