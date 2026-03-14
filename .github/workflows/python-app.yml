@@ -30,7 +30,24 @@ jobs:
         
       - name: Check available images
         run: docker images
-        
+
+      - name: Install postgres client tools required for psql command
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Create vectordb database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres \
+            -c "CREATE DATABASE vectordb;"
+          
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d vectordb \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Verify database and extension
+        run: |
+          # check database exists
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres \
+            -c "SELECT datname FROM pg_database WHERE datname='vectordb';" \
+            | grep vectordb && echo "vectordb exists" || exit 1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7        # official uv action
