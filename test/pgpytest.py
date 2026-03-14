@@ -3,12 +3,12 @@ import pytest
 from test.document_processor_test import document_proc_test
 from test.docling_test import docling_test
 
-# ── define the file path once here ──────────────────────────
+
 @pytest.fixture
 def test_file():
     return "./data/test.pdf"
 
-# ── pytest calls main() automatically ───────────────────────
+
 def test_pgvector_processing(test_file):
     records = process_document(test_file)
 
