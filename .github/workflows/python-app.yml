@@ -33,10 +33,7 @@ jobs:
 
       - name: Volume create
         run: docker volume create pgvector-data 
-
-      - name: Wait for healthy state
-        run: docker compose ps
-      
+     
       - name: run docker image
         run: docker run --name pgvector-container -e POSTGRES_PASSWORD=postgres -p 5432:5432 -v pgvector-data:/var/lib/postgresql/data -d pgvector/pgvector:pg17
 
