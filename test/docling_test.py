@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 #EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 EMBED_MODEL_ID = "BAAI/bge-base-en-v1.5"
 
-srcFile = "./data/VL_JEPA.pdf"
-srcFile = "./data/Math1.pdf"
-srcFile = "./data/3a.pdf"
+#srcFile = "./data/VL_JEPA.pdf"
+#srcFile = "./data/Math1.pdf"
+#srcFile = "./data/3a.pdf"
 page_chunks = 50
 
 
@@ -191,7 +191,7 @@ def start_main(path:str|PathLike)->SentenceTransformer:
     logging.info(f"{total_pages=}")
     
     doc_obj_list = []
-    for docobj in _convert_document_gen(converter, file=srcFile,total_pages=total_pages,page_chunks=page_chunks):
+    for docobj in _convert_document_gen(converter, file=path,total_pages=total_pages,page_chunks=page_chunks):
         doc_obj_list.append(docobj)
     
     logging.info(f"Total chunks = {len(doc_obj_list)}")
