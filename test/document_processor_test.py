@@ -53,7 +53,7 @@ def document_proc_test(path:str|PathLike) -> tuple[str]:
 
 
     # Test vector embeddings inference for similarity search.
-    query = "Overview of Supervised Learning"
+    query = "Maximum path lengths, per-layer complexity and minimum number of sequential operations Table"
     records = test_embeddings(query=query, model=model)
     return records
 

@@ -240,7 +240,7 @@ def test_embeddings(query:str, model:SentenceTransformer) -> list[tuple]:
 
 def docling_test(path:str|PathLike) -> tuple[str]:
     model = start_main(path=path)
-    query = "Video classification and text-to-video retrieval for SigLIP2"
+    query = "The Transformer achieves better BLEU scores than previous state-of-the-art models"
     records = test_embeddings(query, model)
     return records
 
@@ -253,7 +253,7 @@ def load_file():
         
 if __name__=="__main__":
     model = start_main(path=load_file())
-    query = "Video classification and text-to-video retrieval for SigLIP2"
+    query = "The Transformer achieves better BLEU scores than previous state-of-the-art models"
     records = test_embeddings(query, model)
     assert len(records)>0
 
