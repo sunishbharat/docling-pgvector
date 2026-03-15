@@ -1,8 +1,16 @@
 
+# docling_test 
+#
+# To run in local vscode environment.
+# > uv run python -m test.docling_test  
+#
+#
+import os
 import sys
 import logging
 import torch
 import pymupdf
+import urllib.request
 from os import PathLike
 from pathlib import Path
 from docling.exceptions import ConversionError
@@ -32,9 +40,8 @@ logger = logging.getLogger(__name__)
 #EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 EMBED_MODEL_ID = "BAAI/bge-base-en-v1.5"
 
-#srcFile = "./data/VL_JEPA.pdf"
-#srcFile = "./data/Math1.pdf"
-#srcFile = "./data/3a.pdf"
+srcFile = r"./data/test.pdf"
+url_paper=r"https://arxiv.org/pdf/1706.03762"
 page_chunks = 50
 
 
@@ -236,9 +243,16 @@ def docling_test(path:str|PathLike) -> tuple[str]:
     query = "Video classification and text-to-video retrieval for SigLIP2"
     records = test_embeddings(query, model)
     return records
+
+def load_file():
+    path=srcFile
+    if not os.path.exists(path):
+        urllib.request.urlretrieve(url_paper, path)
+        logging.info("Loading ..{path=}")
+    return path
         
 if __name__=="__main__":
-    model = start_main()
+    model = start_main(path=load_file())
     query = "Video classification and text-to-video retrieval for SigLIP2"
     records = test_embeddings(query, model)
     assert len(records)>0

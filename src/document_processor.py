@@ -1,6 +1,12 @@
 
-import logging
+# document_processor test script
+#
+# To run in local vscode environment.
+# > uv run python -m test.document_processor_test
+#
+#
 import sys
+import logging
 import pymupdf
 import numpy as np
 from os import PathLike
@@ -11,12 +17,12 @@ from typing import Iterable, Sequence
 from dataclasses import dataclass, field
 from dconfig import Chunkerconfig, EmbeddingsConfig
 from docling.datamodel.base_models import InputFormat
-from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
-from docling.datamodel.pipeline_options import PdfPipelineOptions
 from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import HfApi

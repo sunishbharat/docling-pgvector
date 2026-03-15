@@ -3,7 +3,7 @@ from document_processor import DocumentProcessor
 from dconfig import EmbeddingsConfig
 from pgvector_client import PGVectorClient
 from sentence_transformers import SentenceTransformer
-from test.docling_test import test_embeddings
+from test.docling_test import test_embeddings, load_file
 from os import PathLike
 
 logging.basicConfig(level=logging.INFO)
@@ -13,10 +13,6 @@ model_1 = "BAAI/bge-small-en-v1.5"
 model_2= "sentence-transformers/all-MiniLM-L6-v2"
 model_3= "llama-3.2b"
 
-#srcFile = "./data/VL_JEPA.pdf"
-#srcFile = "./data/Math1.pdf"
-srcFile = "./data/python_compr.pdf"
-srcFile = r"./data/3a.pdf"
 page_chunks = 50
 
 ######################################
@@ -62,5 +58,5 @@ def document_proc_test(path:str|PathLike) -> tuple[str]:
     return records
 
 if __name__=="__main__":
-    document_proc_test(path=srcFile)
+    document_proc_test(path=load_file())
     logging.info("document_proc_test completed")

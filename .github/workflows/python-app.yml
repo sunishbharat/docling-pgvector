@@ -64,7 +64,7 @@ jobs:
       - name: Download test PDF
         run: |
           mkdir -p ./data
-          curl -L https://arxiv.org/pdf/2408.09869 -o ./data/test.pdf
+          curl -L https://arxiv.org/pdf/1706.03762 -o ./data/test.pdf
           ls -la ./data/
       
       - name: Check if import works
@@ -74,4 +74,13 @@ jobs:
         run: uv run pytest test/pgpytest.py -v -s
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vectordb
+          
+      - name: Run internal docling test
+        run: uv run python -m test.docling_test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vectordb
         
+      - name: Run internal document processor test
+        run: uv run python -m test.document_processor_test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vectordb
