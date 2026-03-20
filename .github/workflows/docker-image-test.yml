@@ -1,0 +1,75 @@
+# This workflow runs tests inside the pre-built (package) docling-pgvector Docker image
+
+name: docling_pgvector_container_test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/sunishbharat/docling-pgvector:cpu-dev
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vectordb
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install postgres client tools
+        run: apt-get install -y postgresql-client
+
+      - name: Create vectordb database and enable extension
+        run: |
+          PGPASSWORD=postgres psql -h pgvector -p 5432 -U postgres \
+            -c "CREATE DATABASE vectordb;" || echo "DB already exists, continuing..."
+
+          PGPASSWORD=postgres psql -h pgvector -p 5432 -U postgres -d vectordb \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Verify database and extension
+        run: |
+          PGPASSWORD=postgres psql -h pgvector -p 5432 -U postgres \
+            -c "SELECT datname FROM pg_database WHERE datname='vectordb';" \
+            | grep vectordb && echo "vectordb exists" || exit 1
+
+      - name: Install project in editable mode
+        run: pip install -e .
+
+      - name: Download test PDF
+        run: |
+          mkdir -p ./data
+          curl -L https://arxiv.org/pdf/1706.03762 -o ./data/test.pdf
+
+      - name: Check import works
+        run: python -c "from pgvector_client import PGVectorClient; print('Import OK')"
+
+      - name: Run pytest
+        run: pytest test/pgpytest.py -v -s
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@pgvector:5432/vectordb
+
+      - name: Run internal docling test
+        run: python -m test.docling_test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@pgvector:5432/vectordb
+
+      - name: Run internal document processor test
+        run: python -m test.document_processor_test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@pgvector:5432/vectordb
