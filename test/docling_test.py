@@ -24,7 +24,7 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
 from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
-from pgvector_client import PGVectorClient
+from pgvector_client import PGVectorClient, PGVectorConfig
 from collections.abc import Iterable
 from docling_core.types.doc import (
     DoclingDocument,
@@ -33,6 +33,8 @@ from docling_core.types.doc import (
     PictureItem,
     SectionHeaderItem,
 )
+import os
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,6 +47,23 @@ url_paper=r"https://arxiv.org/pdf/1706.03762"
 page_chunks = 50
 
 
+######################################
+# get_pgConfig_env
+#
+######################################
+def get_pgConfig_env()-> PGVectorConfig:
+    url = urlparse(os.getenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@pgvector:5432/vectordb"
+    ))
+    pgConfig = PGVectorConfig(
+        database=url.path.lstrip("/"),   # vectordb
+        user=url.username,               # postgres
+        password=url.password,           # postgres
+        host=url.hostname,               # pgvector
+        port=url.port,                   # 5432
+    )
+    return pgConfig
 
 ######################################
 # get_total_pages
@@ -160,13 +179,13 @@ def generate_embeddings(model:SentenceTransformer,
 def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, embeddings_list2):
 
     embd_dim = model.get_sentence_embedding_dimension()
-    with PGVectorClient() as pgclient:
+    with PGVectorClient(get_pgConfig_env()) as pgclient:
         with pgclient.cursor() as cur:
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
             cur.execute("DROP TABLE IF EXISTS ITEMS")
             cur.execute(f"""CREATE TABLE IF NOT EXISTS items (id bigserial PRIMARY KEY, text TEXT, embedding vector({embd_dim}));""")
 
-    with PGVectorClient() as pgclient:
+    with PGVectorClient(get_pgConfig_env()) as pgclient:
         for chunk, embed in zip(content_extract_list, embeddings_list2):
             with pgclient.cursor() as cur:
                 cur.execute("INSERT INTO items (text, embedding) VALUES (%s, %s);", (chunk, embed))
@@ -227,7 +246,7 @@ def test_embeddings(query:str, model:SentenceTransformer) -> list[tuple]:
 
     logging.info(f"SQL Query = {sql} ")
 
-    with PGVectorClient() as pgclient:
+    with PGVectorClient(get_pgConfig_env()) as pgclient:
         with pgclient.cursor() as cur:
             cur.execute(sql, (query_emb, query_emb))
             rows = cur.fetchall()

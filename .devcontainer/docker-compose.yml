@@ -1,30 +1,44 @@
-version: '3.8'
 
-networks:
-  devnet:
-    name: devnet         
 
 services:
   app:
-    image: mcr.microsoft.com/devcontainers/python:3-3.13-trixie
+    image: ghcr.io/sunishbharat/docling-pgvector:cpu-dev    
     volumes:
       - ..:/workspace/docling-pgvector:cached
+    working_dir: /workspace/docling-pgvector
     command: sleep infinity
     environment:
       DATABASE_URL: postgresql://postgres:postgres@pgvector:5432/vectordb
+      VIRTUAL_ENV: /opt/venv
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      SHELL: /bin/bash
     depends_on:
-      - pgvector
+      pgvector:
+        condition: service_healthy
     networks:
       - devnet
 
   pgvector:
     image: pgvector/pgvector:pg17
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: vectordb
-    ports:
-      - 5432:5432
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
     networks:
-      - devnet
+      - devnet                   
+
+networks:
+  devnet:                         
+    name: devnet
+
+volumes:
+  pgvector_data:

@@ -1,14 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "==> Installing postgresql-client..."
-sudo apt-get update && sudo apt-get install -y postgresql-client
-
-echo "==> Waiting for pgvector to be ready..."
-until PGPASSWORD=postgres psql -h pgvector -p 5432 -U postgres -c '\q' 2>/dev/null; do
-  echo "  pgvector not ready, retrying in 2s..."
-  sleep 2
-done
+echo "==> Installing local project..."
+pip install -e .
 
 echo "==> Creating vectordb and enabling pgvector extension..."
 PGPASSWORD=postgres psql -h pgvector -p 5432 -U postgres \
@@ -18,8 +12,7 @@ PGPASSWORD=postgres psql -h pgvector -p 5432 -U postgres -d vectordb \
   -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 echo "==> Installing Python dependencies..."
-uv sync
-uv pip install -e .
+echo "==> Python dependencies Done!"
 
 echo "==> Downloading test PDF..."
 mkdir -p ./data

@@ -3,17 +3,23 @@ from pgvector_client import PGVectorConfig
 from tenacity import RetryError
 import logging
 import sys
+import os
+from urllib.parse import urlparse
 
+url = urlparse(os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@pgvector:5432/vectordb"
+))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 pgConfig = PGVectorConfig(
-    database="pgvectordb",
-    user="postgres",
-    password="postgres",
-    host="127.0.0.1",
-    port=5432,
+    database=url.path.lstrip("/"),   # vectordb
+    user=url.username,               # postgres
+    password=url.password,           # postgres
+    host=url.hostname,               # pgvector
+    port=url.port,                   # 5432
 )
 
 try:

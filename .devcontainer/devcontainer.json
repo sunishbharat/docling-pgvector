@@ -1,44 +1,30 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
-	"name": "DocumentProc-Python 3",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	// pgvector Docker compose
+  "name": "docling-pgvector",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "app",
 	"workspaceFolder": "/workspace/docling-pgvector",
 
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	"features": {
-		"ghcr.io/va-h/devcontainers-features/uv:1": {
-			"version": "latest"
+  "remoteEnv": {
+    "VIRTUAL_ENV": "/opt/venv",
+    "UV_PROJECT_ENVIRONMENT": "/opt/venv",  // stops uv creating .venv
+    "PATH": "/opt/venv/bin:${containerEnv:PATH}"
 		},
-		"ghcr.io/devcontainers-extra/features/uv:1": {
-			"version": "latest"
-		}
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python"
 	},
 
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	 "forwardPorts": [5432], //pgvector port
 
-	// Use 'postCreateCommand' to run commands after the container is created.
-	 "postCreateCommand":
-		"bash .devcontainer/setup.sh",
-
-	// DATABASE_URL points to the pgvector service (service name = hostname)
-	"remoteEnv": {
-		"PG_DATABASE": "vectordb",
-		"PG_HOST": "pgvector",
-		"PG_USER": "postgres",
-		"PG_PASSWORD": "postgres",
-		"PG_PORT": "5432",
-		"DATABASE_URL": "postgresql://postgres:postgres@pgvector:5432/vectordb"
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
 	}
-	
+  }
 
-	// Configure tool-specific properties.
-	// "customizations": {},
 
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "root"
 }

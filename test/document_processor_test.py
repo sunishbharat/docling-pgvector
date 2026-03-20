@@ -3,7 +3,7 @@ from document_processor import DocumentProcessor
 from dconfig import EmbeddingsConfig
 from pgvector_client import PGVectorClient
 from sentence_transformers import SentenceTransformer
-from test.docling_test import test_embeddings, load_file
+from test.docling_test import test_embeddings, load_file, get_pgConfig_env
 from os import PathLike
 
 logging.basicConfig(level=logging.INFO)
@@ -22,13 +22,13 @@ page_chunks = 50
 def pgVector_db_update(model:SentenceTransformer ,content_extract_list:list, embeddings_list):
 
     embd_dim = model.get_sentence_embedding_dimension()
-    with PGVectorClient() as pgclient:
+    with PGVectorClient(get_pgConfig_env()) as pgclient:
         with pgclient.cursor() as cur:
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
             cur.execute("DROP TABLE IF EXISTS ITEMS")
             cur.execute(f"""CREATE TABLE IF NOT EXISTS items (id bigserial PRIMARY KEY, text TEXT, embedding vector({embd_dim}));""")
 
-    with PGVectorClient() as pgclient:
+    with PGVectorClient(get_pgConfig_env()) as pgclient:
         for chunk, embed in zip(content_extract_list, embeddings_list):
             with pgclient.cursor() as cur:
                 cur.execute("INSERT INTO items (text, embedding) VALUES (%s, %s);", (chunk, embed))
