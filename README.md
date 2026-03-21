@@ -2,12 +2,13 @@
 
 [![CI](https://github.com/sunishbharat/docling-pgvector/actions/workflows/python-app.yml/badge.svg)](https://github.com/sunishbharat/docling-pgvector/actions/workflows/python-app.yml)
 [![Docker Image Test](https://github.com/sunishbharat/docling-pgvector/actions/workflows/docker-image-test.yml/badge.svg)](https://github.com/sunishbharat/docling-pgvector/actions/workflows/docker-image-test.yml)
-[![License MIT](https://img.shields.io/github/license/sunishbharat/docling-pgvector)](https://opensource.org/licenses/MIT)
+[![License MIT](https://img.shields.io/github/license/sunishbharat/docling-pgvector)](https://github.com/sunishbharat/docling-pgvector/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](https://www.python.org/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Pydantic v2](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/pydantic/pydantic/main/docs/badge/v2.json)](https://pydantic.dev)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/sunishbharat/docling-pgvector/pkgs/container/docling-pgvector)
 [![pgvector](https://img.shields.io/badge/pgvector-pg17-336791?logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
+[![Docling](https://img.shields.io/badge/powered%20by-Docling-blue)](https://github.com/docling-project/docling)
 
 Building a RAG pipeline requires wiring together a document parser, an embedding model, and a vector database yourself, investing time learning each tool along the way. **docling-pgvector** frees you from that overhead and gives you a simple interface to focus on what matters:
 
@@ -57,16 +58,26 @@ PostgreSQL + pgvector          ← similarity search (L2 distance)
 
 > The fastest way to get started. Pull the pre-built image and run — no Python, no dependency installs, no setup scripts required.
 
+> **Terminal:** Use **Git Bash** or **WSL** on Windows. If you prefer PowerShell, replace `$(pwd)` with `${PWD}` in step 5. Command Prompt is not recommended as some commands will not work correctly.
+
 **1. Pull the image**
 ```bash
 docker pull ghcr.io/sunishbharat/docling-pgvector:cpu-dev
 ```
 
-**2. Start PostgreSQL + pgvector**
+**2. Clone the repository**
+```bash
+git clone https://github.com/sunishbharat/docling-pgvector.git
+cd docling-pgvector
+```
+
+**3. Start PostgreSQL + pgvector**
 
 Create a shared network so both containers can talk to each other, then start the database.
 ```bash
-docker network create devnet
+docker network create devnet || true
+
+docker rm -f pgvector-container 2>/dev/null || true
 
 docker run --name pgvector-container \
   --network devnet \
@@ -77,13 +88,20 @@ docker run --name pgvector-container \
   -d pgvector/pgvector:pg17
 ```
 
-**3. Create the database extension**
+**4. Create the database extension**
+
+Wait until the database is ready, then enable the pgvector extension.
 ```bash
-PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d vectordb \
+docker exec pgvector-container bash -c "until pg_isready -U postgres; do sleep 1; done"
+
+docker exec pgvector-container psql -U postgres -d vectordb \
   -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-**4. Run the container**
+**5. Run the container**
+
+> On Windows, replace `$(pwd)` with `${PWD}` in PowerShell or `%cd%` in Command Prompt.
+
 ```bash
 docker run --rm -it \
   --network devnet \
@@ -94,10 +112,9 @@ docker run --rm -it \
   bash
 ```
 
-**5. Inside the container — install the project and run tests**
+**6. Inside the container — install the project and run tests**
 ```bash
-pip install -e .
-mkdir -p ./data && curl -L https://arxiv.org/pdf/1706.03762 -o ./data/test.pdf
+/opt/venv/bin/pip install -e .
 pytest test/pgpytest.py -v -s
 python -m test.docling_test
 python -m test.document_processor_test
