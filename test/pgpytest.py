@@ -14,6 +14,7 @@ url_paper=r"https://arxiv.org/pdf/1706.03762"
 @pytest.fixture
 def test_file():
     path=r"./data/test.pdf"
+    os.makedirs("./data", exist_ok=True)
     if not os.path.exists(path):
         urllib.request.urlretrieve(url_paper, path)
     return path
