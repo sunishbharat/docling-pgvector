@@ -67,7 +67,7 @@ jobs:
           curl -L https://arxiv.org/pdf/1706.03762 -o ./data/test.pdf
           ls -la ./data/
           
-      - name: Verify it's a real PDF
+      - name: Validate pdf file Integrity
         run:  head -c 5 ./data/test.pdf | grep -q '%PDF-' || (echo "Invalid PDF" && exit 1)
       
       - name: Check if import works
