@@ -10,7 +10,7 @@
 [![pgvector](https://img.shields.io/badge/pgvector-pg17-336791?logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
 [![Docling](https://img.shields.io/badge/powered%20by-Docling-blue)](https://github.com/docling-project/docling)
 
-Building a RAG pipeline requires wiring together a document parser, an embedding model, and a vector database yourself, investing time learning each tool along the way. **docling-pgvector** frees you from that overhead and gives you a simple interface to focus on what matters:
+Building a RAG pipeline requires wiring together a document parser, an embedding model, and a vector database yourself, investing time learning each tool along the way. **docling-pgvector** frees from that overhead and gives user a simple interface to focus on what matters:
 
 - Provide a PDF as input
 - Run a query
