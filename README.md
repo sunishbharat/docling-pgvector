@@ -31,7 +31,7 @@ Docling (PDF parser)          ← GPU auto-detected
    │  page-batched conversion
    ▼
 HybridChunker + TableItem     ← semantic text chunks + Markdown tables
-   │  deduplicated content
+   │  unique content
    ▼
 SentenceTransformer            ← BAAI/bge-base-en-v1.5 (768-dim)
    │  vector embeddings
