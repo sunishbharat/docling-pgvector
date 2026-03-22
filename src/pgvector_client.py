@@ -1,35 +1,11 @@
-
-"""
- PGVectorClient class:
- Prerequisites:
- Simple setup to store vector embedding in postgres database
- 
- Steps to setup postgres and pgvector using docker.
- -------------------------------------------------
- ## Download image
- - docker pull pgvector/pgvector:pg17
- - docker images
- 
- ## Create Volume
- - docker volume ls
- - docker volume create pgvector-data
-
- ## Create container
- - docker run --name pgvector-container -e POSTGRES_PASSWORD=postgres -p 5432:5432 -v pgvector-data:/var/lib/postgresql/data -d pgvector/pgvector:pg17
- - docker ps
- 
- ## pgadmin4
- - docker pull dpage/pgadmin4
- - docker run --name pgadmin-container -p 5050:80 -e PGADMIN_DEFAULT_EMAIL=user@domain.com -e PGADMIN_DEFAULT_PASSWORD=password -d dpage/pgadmin4
-"""
+"""PGVectorClient — psycopg2 wrapper for PostgreSQL + pgvector."""
 
 import os
-import sys
+import re
 import psycopg2
 import logging
-import numpy as np
-from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential_jitter, retry_if_exception_type
+from tenacity import Retrying, stop_after_attempt, wait_exponential_jitter, \
+    retry_if_exception_type, before_sleep_log
 from psycopg2 import OperationalError
 from psycopg2.extensions import connection, cursor
 from dataclasses import dataclass, field
@@ -37,102 +13,142 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pgvector.psycopg2 import register_vector
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+except ImportError:
+    pass
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Allowed pattern for column identifiers — prevents SQL injection in to_sql()
+_SAFE_IDENTIFIER = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+# Allowed pattern for dtype: letters, digits, spaces, parentheses, underscores — no quotes or semicolons
+_SAFE_DTYPE = re.compile(r'^[a-zA-Z][a-zA-Z0-9_()\s]*$')
 
 
 @dataclass
 class PGVectorConfig:
-    database:str= field(default_factory=lambda: os.getenv("PG_DATABASE","vectordb"))
-    host:str    = field(default_factory=lambda: os.getenv("PG_HOST","localhost"))
-    user:str    = field(default_factory=lambda: os.getenv("PG_USER","postgres"))
-    password:str= field(default_factory=lambda: os.getenv("PG_PASSWORD","postgres"))
-    port:int    = field(default_factory=lambda: os.getenv("PG_PORT",5432))
-    max_retries:int     = 5 
-    retry_wait_initial:float =1.0
-    retry_wait_max:float  =10.0
+    database: str  = field(default_factory=lambda: os.getenv("PG_DATABASE", "vectordb"))
+    host: str      = field(default_factory=lambda: os.getenv("PG_HOST", "localhost"))
+    user: str      = field(default_factory=lambda: os.getenv("PG_USER", "postgres"))
+    password: str  = field(default_factory=lambda: os.getenv("PG_PASSWORD", "postgres"))
+    port: int      = field(default_factory=lambda: int(os.getenv("PG_PORT", 5432)))
+    max_retries: int        = 5
+    retry_wait_initial: float = 1.0
+    retry_wait_max: float     = 10.0
+
+    def __repr__(self) -> str:
+        return (
+            f"PGVectorConfig(host={self.host!r}, port={self.port}, "
+            f"database={self.database!r}, user={self.user!r}, password='***')"
+        )
+
 
 @dataclass
 class ColumnDefinition:
-    """ 
-    Table columns with name and PostgreSQL datatype: 'TEXT','INT','vector(4)'
-    """
-    name:str
-    dtype:str
-    
+    """Table column with name and PostgreSQL datatype: 'TEXT', 'INT', 'vector(768)'."""
+    name: str
+    dtype: str
+
+    def __post_init__(self) -> None:
+        if not _SAFE_IDENTIFIER.match(self.name):
+            raise ValueError(
+                f"Invalid column name {self.name!r}. "
+                "Must start with a letter or underscore and contain only alphanumerics and underscores."
+            )
+        if not _SAFE_DTYPE.match(self.dtype):
+            raise ValueError(
+                f"Invalid dtype {self.dtype!r}. "
+                "Must contain only letters, digits, spaces, parentheses, and underscores."
+            )
+
     def to_sql(self) -> str:
         return f"{self.name} {self.dtype}"
-    
 
 
 class PGVectorClient:
-    """
-    pgvector client to interact with PostgreSQL+pgvector database.
-    Manages vector embeddings and schemas.
+    """psycopg2 client for PostgreSQL + pgvector.
 
+    Usage::
+
+        with PGVectorClient(config) as client:
+            with client.cursor() as cur:
+                cur.execute("SELECT 1")
     """
-    def __init__(self, config: PGVectorConfig|None=None):
+
+    def __init__(self, config: PGVectorConfig | None = None):
         self.config = config or PGVectorConfig()
-        self._conn : connection | None = None
-        
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential_jitter(initial=1.0, max=10.0),
-        retry=retry_if_exception_type(OperationalError),
-    )
+        self._conn: connection | None = None
+
     def connect(self) -> None:
-        """ Establish connection with pgvector database with retry mechanism"""
-        
-        logger.info(f"Connecting to PostgreSQL at \
-            {self.config.host}:{self.config.port}:{self.config.database} ")
-    
-        self._conn = psycopg2.connect(
-            database=self.config.database, 
-            user    =self.config.user,
-            password=self.config.password,
-            host    =self.config.host,
-            port    =self.config.port
-        ) 
-        register_vector(self._conn)
-        logger.info(f"{self.config.database}:Connection established")
-        
-    def disconnect(self)->None:
-        """
-        Gracefully close the database connection
+        """Establish a connection with exponential-backoff retry on OperationalError.
+
+        Raises:
+            tenacity.RetryError: If all retry attempts are exhausted.
         """
         if self._conn and not self._conn.closed:
+            logger.debug("connect() called on an already-open connection — skipping.")
+            return
+
+        logger.info(
+            "Connecting to PostgreSQL at %s:%s/%s",
+            self.config.host, self.config.port, self.config.database,
+        )
+
+        for attempt in Retrying(
+            stop=stop_after_attempt(self.config.max_retries),
+            wait=wait_exponential_jitter(
+                initial=self.config.retry_wait_initial,
+                max=self.config.retry_wait_max,
+            ),
+            retry=retry_if_exception_type(OperationalError),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        ):
+            with attempt:
+                self._conn = psycopg2.connect(
+                    database=self.config.database,
+                    user=self.config.user,
+                    password=self.config.password,
+                    host=self.config.host,
+                    port=self.config.port,
+                )
+                register_vector(self._conn)
+
+        logger.info("Connection established to %s/%s", self.config.host, self.config.database)
+
+    def disconnect(self) -> None:
+        """Close the database connection if open."""
+        if self._conn and not self._conn.closed:
             self._conn.close()
+            logger.info("Connection closed (%s/%s)", self.config.host, self.config.database)
 
-        logger.info(f"{self.config.database}:Connection closed")
-        
     @contextmanager
-    def cursor(self) -> Generator[cursor, None,None]:
-        """ 
-        Yield a cursor , on success commit and rollback on error
-        """
-        if not self._conn  or self._conn.closed:
-            raise RuntimeError("No database connected, call connect() first")
-        cur = self._conn.cursor()
+    def cursor(self) -> Generator[cursor, None, None]:
+        """Yield a cursor; commit on success, rollback and re-raise on error.
 
+        Raises:
+            RuntimeError: If called before connect().
+            Exception: Re-raises any exception that occurs inside the block.
+        """
+        if not self._conn or self._conn.closed:
+            raise RuntimeError("No active connection. Call connect() or use as a context manager.")
+
+        cur = self._conn.cursor()
         try:
-           yield cur
-           self._conn.commit()
-           
-        except Exception as e:
+            yield cur
+            self._conn.commit()
+        except Exception:
             self._conn.rollback()
-            logger.exception("Failed to commit : %s",e)
+            logger.exception("Transaction rolled back")
+            raise
         finally:
-            # release the cursor
             cur.close()
-            
+
     def __enter__(self) -> "PGVectorClient":
         self.connect()
         return self
 
-        
-    def __exit__(self, *_) -> None:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.disconnect()
-        
-
