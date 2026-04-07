@@ -12,3 +12,7 @@ data
 .env
 *.local.*
 *.local
+
+# Markdown files (except README.md)
+*.md
+!README.md

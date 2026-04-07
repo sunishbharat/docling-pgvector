@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 url = urlparse(os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:postgres@pgvector:5432/vectordb"
+    "postgresql://postgres:postgres@localhost:5432/vectordb"
 ))
 
 logging.basicConfig(level=logging.INFO)

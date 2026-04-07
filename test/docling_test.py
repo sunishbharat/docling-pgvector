@@ -54,7 +54,7 @@ page_chunks = 50
 def get_pgConfig_env()-> PGVectorConfig:
     url = urlparse(os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:postgres@pgvector:5432/vectordb"
+        "postgresql://postgres:postgres@localhost:5432/vectordb"
     ))
     pgConfig = PGVectorConfig(
         database=url.path.lstrip("/"),   # vectordb
